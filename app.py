@@ -107,11 +107,9 @@ def load_data():
 
     clean["Date"] = pd.to_datetime(clean["Date"], errors="coerce")
 
-    # Numeric conversion
     for col in ["Gross (t)", "Tare (t)", "Net (t)"]:
         clean[col] = pd.to_numeric(clean[col], errors="coerce")
 
-    # Torpedo No as ID (no decimals)
     clean["Torpedo No"] = clean["Torpedo No"].astype("Int64").astype(str)
 
     return clean.dropna(subset=["Date"])
@@ -175,12 +173,16 @@ if cast_search:
         filtered["Cast ID"].astype(str).str.contains(cast_search, case=False)
     ]
 
-# ---------------- PER-DAY SERIAL NUMBER ----------------
+# ---------------- RESET LEFT INDEX PER DAY ----------------
 filtered = filtered.sort_values("Date")
-filtered["S.No"] = (
-    filtered.groupby(filtered["Date"].dt.date)
-    .cumcount() + 1
+
+filtered = (
+    filtered
+    .groupby(filtered["Date"].dt.date, group_keys=False)
+    .apply(lambda x: x.reset_index(drop=True))
 )
+
+filtered.index = filtered.index + 1  # start index from 1
 
 # ---------------- DATE CONTEXT ----------------
 if start_date == end_date:
@@ -215,7 +217,7 @@ display_df = filtered.copy()
 display_df["Date"] = display_df["Date"].dt.date
 
 display_df = display_df[
-    ["S.No", "Date", "Cast ID", "Torpedo No", "Gross (t)", "Tare (t)", "Net (t)"]
+    ["Date", "Cast ID", "Torpedo No", "Gross (t)", "Tare (t)", "Net (t)"]
 ]
 
 styled_df = display_df.style.applymap(
