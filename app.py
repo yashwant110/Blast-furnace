@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from datetime import timedelta
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -107,39 +108,68 @@ def load_data():
 
     clean["Date"] = pd.to_datetime(clean["Date"], errors="coerce")
 
-    # FORCE numeric (CRITICAL FIX)
+    # Force numeric weights
     for col in ["Gross (t)", "Tare (t)", "Net (t)"]:
         clean[col] = pd.to_numeric(clean[col], errors="coerce")
+
+    # Torpedo No without decimals
+    clean["Torpedo No"] = clean["Torpedo No"].astype("Int64").astype(str)
 
     return clean.dropna(subset=["Date"])
 
 df = load_data()
 
-# ---------------- FILTERS ----------------
-st.subheader("Filters")
+# ---------------- CALENDAR-STYLE DATE SELECTOR ----------------
+st.subheader("Date Selection")
 
-f1, f2, f3 = st.columns(3)
+mode = st.radio(
+    "Select view mode",
+    ["Single Day", "Date Range"],
+    horizontal=True
+)
+
+if mode == "Single Day":
+    selected_date = st.date_input(
+        "Select Date",
+        df["Date"].min()
+    )
+    start_date = pd.to_datetime(selected_date)
+    end_date = start_date
+else:
+    date_range = st.date_input(
+        "Select Date Range",
+        [df["Date"].min(), df["Date"].max()]
+    )
+    start_date = pd.to_datetime(date_range[0])
+    end_date = pd.to_datetime(date_range[1])
+
+# ---------------- OTHER FILTERS ----------------
+f1, f2 = st.columns(2)
 
 with f1:
-    date_range = st.date_input(
-        "Date",
-        [df["Date"].min(), df["Date"].max()]
+    torpedo_filter = st.multiselect(
+        "Torpedo No",
+        sorted(df["Torpedo No"].unique())
     )
 
 with f2:
-    torpedo_filter = st.multiselect(
-        "Torpedo No.",
-        sorted(df["Torpedo No"].dropna().unique())
-    )
-
-with f3:
     cast_search = st.text_input("Cast ID")
 
+# ---------------- APPLY FILTERS ----------------
 filtered = df.copy()
+
 filtered = filtered[
-    (filtered["Date"] >= pd.to_datetime(date_range[0])) &
-    (filtered["Date"] <= pd.to_datetime(date_range[1]))
+    (filtered["Date"] >= start_date) &
+    (filtered["Date"] <= end_date)
 ]
+
+# ---- NO DATA HANDLING ----
+if filtered.empty:
+    if start_date == end_date:
+        st.warning(f"No data available for {start_date.date()}")
+    else:
+        st.warning("No data available for the selected date range")
+    st.stop()
 
 if torpedo_filter:
     filtered = filtered[filtered["Torpedo No"].isin(torpedo_filter)]
@@ -149,32 +179,29 @@ if cast_search:
         filtered["Cast ID"].astype(str).str.contains(cast_search, case=False)
     ]
 
-# ---------------- KPI CARDS ----------------
-st.markdown("###")
+# ---- DATE CONTEXT ----
+if start_date == end_date:
+    st.markdown(f"### 📅 Data for {start_date.date()}")
+else:
+    st.markdown(f"### 📅 Data from {start_date.date()} to {end_date.date()}")
 
+# ---------------- KPI CARDS ----------------
 k1, k2, k3, k4 = st.columns(4)
 
 k1.markdown(
-    f"<div class='kpi-card'>Total Casts"
-    f"<div class='kpi-value'>{filtered['Cast ID'].nunique()}</div></div>",
+    f"<div class='kpi-card'>Total Casts<div class='kpi-value'>{filtered['Cast ID'].nunique()}</div></div>",
     unsafe_allow_html=True
 )
-
 k2.markdown(
-    f"<div class='kpi-card'>Total Torpedos Used"
-    f"<div class='kpi-value'>{filtered['Torpedo No'].nunique()}</div></div>",
+    f"<div class='kpi-card'>Torpedos Used<div class='kpi-value'>{filtered['Torpedo No'].nunique()}</div></div>",
     unsafe_allow_html=True
 )
-
 k3.markdown(
-    f"<div class='kpi-card'>Total Net Hot Metal"
-    f"<div class='kpi-value net-highlight'>{filtered['Net (t)'].sum():,.1f} t</div></div>",
+    f"<div class='kpi-card'>Total Net Hot Metal<div class='kpi-value net-highlight'>{filtered['Net (t)'].sum():,.1f} t</div></div>",
     unsafe_allow_html=True
 )
-
 k4.markdown(
-    f"<div class='kpi-card'>Avg. Net per Cast"
-    f"<div class='kpi-value'>{filtered['Net (t)'].mean():.1f} t</div></div>",
+    f"<div class='kpi-card'>Avg Net / Cast<div class='kpi-value'>{filtered['Net (t)'].mean():.1f} t</div></div>",
     unsafe_allow_html=True
 )
 
@@ -189,24 +216,22 @@ styled_df = filtered.sort_values("Date").style.applymap(
 st.dataframe(styled_df, use_container_width=True)
 
 # ---------------- CHARTS ----------------
-st.markdown("###")
-
 c1, c2, c3 = st.columns(3)
 
 c1.plotly_chart(
-    px.bar(filtered, x="Date", y="Net (t)", title="Daily Net Hot Metal (t)",
+    px.bar(filtered, x="Date", y="Net (t)",
+           title="Daily Net Hot Metal (t)",
            color_discrete_sequence=["#F57C00"]),
     use_container_width=True
 )
 
 c2.plotly_chart(
     px.bar(filtered, x="Torpedo No", y="Net (t)",
-           title="Torpedo Number vs Net Metal (t)",
+           title="Torpedo vs Net Metal (t)",
            color_discrete_sequence=["#F57C00"]),
     use_container_width=True
 )
 
-# STACKED BAR (FIXED)
 stack_df = filtered.groupby("Torpedo No", as_index=False)[
     ["Gross (t)", "Tare (t)", "Net (t)"]
 ].sum()
