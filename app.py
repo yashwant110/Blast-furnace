@@ -61,7 +61,7 @@ h1, h2, h3 = st.columns([1, 6, 1])
 with h1:
     st.image("assets/jindal_logo.png", width=110)
 with h2:
-    st.markdown("<h2 class='main-title'>Blast Furnace-2 | Torpedo Dispatch Dashboard</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='main-title'>Blast Furnace-2 | Ladle Weight & Torpedo Dispatch Dashboard</h2>", unsafe_allow_html=True)
     st.markdown("<div class='title-line'></div>", unsafe_allow_html=True)
     st.markdown("<div class='subtitle'>Hot Metal Production Monitoring</div>", unsafe_allow_html=True)
 
@@ -209,3 +209,4 @@ c3.plotly_chart(px.bar(stack_df, x="Torpedo No",
 # ---------------- FOOTER ----------------
 st.markdown("---")
 st.markdown("<center>© Blast Furnace-2 | Jindal Steel</center>", unsafe_allow_html=True)
+
