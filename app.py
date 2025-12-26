@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import timedelta
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -70,7 +69,7 @@ h1, h2, h3 = st.columns([1, 6, 1])
 with h1:
     st.image("assets/jindal_logo.png", width=110)
 with h2:
-    st.markdown("<h2 class='main-title'>Blast Furnace-2 | Ladle Weight & Torpedo Dispatch Dashboard</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='main-title'>Blast Furnace-2 | Torpedo Dispatch Dashboard</h2>", unsafe_allow_html=True)
     st.markdown("<div class='title-line'></div>", unsafe_allow_html=True)
     st.markdown("<div class='subtitle'>Hot Metal Production Monitoring</div>", unsafe_allow_html=True)
 
@@ -108,31 +107,28 @@ def load_data():
 
     clean["Date"] = pd.to_datetime(clean["Date"], errors="coerce")
 
-    # Force numeric weights
+    # Numeric conversion
     for col in ["Gross (t)", "Tare (t)", "Net (t)"]:
         clean[col] = pd.to_numeric(clean[col], errors="coerce")
 
-    # Torpedo No without decimals
+    # Torpedo No as ID (no decimals)
     clean["Torpedo No"] = clean["Torpedo No"].astype("Int64").astype(str)
 
     return clean.dropna(subset=["Date"])
 
 df = load_data()
 
-# ---------------- CALENDAR-STYLE DATE SELECTOR ----------------
+# ---------------- CALENDAR SELECTOR ----------------
 st.subheader("Date Selection")
 
 mode = st.radio(
-    "Select view mode",
+    "View Mode",
     ["Single Day", "Date Range"],
     horizontal=True
 )
 
 if mode == "Single Day":
-    selected_date = st.date_input(
-        "Select Date",
-        df["Date"].min()
-    )
+    selected_date = st.date_input("Select Date", df["Date"].min())
     start_date = pd.to_datetime(selected_date)
     end_date = start_date
 else:
@@ -179,7 +175,14 @@ if cast_search:
         filtered["Cast ID"].astype(str).str.contains(cast_search, case=False)
     ]
 
-# ---- DATE CONTEXT ----
+# ---------------- PER-DAY SERIAL NUMBER ----------------
+filtered = filtered.sort_values("Date")
+filtered["S.No"] = (
+    filtered.groupby(filtered["Date"].dt.date)
+    .cumcount() + 1
+)
+
+# ---------------- DATE CONTEXT ----------------
 if start_date == end_date:
     st.markdown(f"### 📅 Data for {start_date.date()}")
 else:
@@ -208,7 +211,14 @@ k4.markdown(
 # ---------------- TABLE ----------------
 st.markdown("### Torpedo Dispatch Details")
 
-styled_df = filtered.sort_values("Date").style.applymap(
+display_df = filtered.copy()
+display_df["Date"] = display_df["Date"].dt.date
+
+display_df = display_df[
+    ["S.No", "Date", "Cast ID", "Torpedo No", "Gross (t)", "Tare (t)", "Net (t)"]
+]
+
+styled_df = display_df.style.applymap(
     lambda x: "color:#F57C00; font-weight:bold;",
     subset=["Net (t)"]
 )
@@ -251,4 +261,3 @@ c3.plotly_chart(
 # ---------------- FOOTER ----------------
 st.markdown("---")
 st.markdown("<center>© Blast Furnace-2 | Jindal Steel</center>", unsafe_allow_html=True)
-
