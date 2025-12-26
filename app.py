@@ -8,52 +8,34 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- CSS (FINAL UI) ----------------
+# ---------------- CSS ----------------
 st.markdown("""
 <style>
-
-/* GLOBAL */
 html, body, [class*="css"] {
     background-color: white;
-    font-family: "Segoe UI", sans-serif;
+    font-family: Segoe UI, sans-serif;
 }
-
-/* TOP ORANGE BAR */
 .top-bar {
     height: 10px;
     background-color: #F57C00;
     margin-bottom: 10px;
 }
-
-/* TITLES */
 .main-title {
     color: #0D1B2A;
     text-align: center;
     font-weight: 700;
 }
-
 .subtitle {
     text-align: center;
     color: #0D1B2A;
     margin-top: -8px;
 }
-
 .title-line {
     width: 360px;
     height: 3px;
     background-color: #F57C00;
     margin: 8px auto 18px auto;
 }
-
-/* FILTER BOXES */
-div[data-baseweb="select"],
-div[data-baseweb="input"],
-div[data-baseweb="datepicker"] {
-    background-color: white !important;
-    border-radius: 8px !important;
-}
-
-/* KPI CARDS */
 .kpi-card {
     background: linear-gradient(135deg, #0D1B2A, #1B2A41);
     color: white;
@@ -62,27 +44,21 @@ div[data-baseweb="datepicker"] {
     text-align: center;
     border-bottom: 6px solid #F57C00;
 }
-
 .kpi-value {
     font-size: 32px;
     font-weight: bold;
 }
-
 .net-highlight {
     color: #F57C00;
 }
-
-/* TABLE */
 thead tr th {
     background-color: #F57C00 !important;
     color: white !important;
     text-align: center;
 }
-
 tbody tr td {
     text-align: center;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -90,10 +66,8 @@ tbody tr td {
 st.markdown("<div class='top-bar'></div>", unsafe_allow_html=True)
 
 h1, h2, h3 = st.columns([1, 6, 1])
-
 with h1:
     st.image("assets/jindal_logo.png", width=110)
-
 with h2:
     st.markdown("<h2 class='main-title'>Blast Furnace-2 | Torpedo Dispatch Dashboard</h2>", unsafe_allow_html=True)
     st.markdown("<div class='title-line'></div>", unsafe_allow_html=True)
@@ -101,7 +75,7 @@ with h2:
 
 st.markdown("---")
 
-# ---------------- DATA LOADER (BULLETPROOF) ----------------
+# ---------------- DATA LOADER ----------------
 @st.cache_data
 def load_data():
     df = pd.read_excel("data/ladle_weight_bf2.xlsx")
@@ -132,6 +106,11 @@ def load_data():
         clean[k] = df[v]
 
     clean["Date"] = pd.to_datetime(clean["Date"], errors="coerce")
+
+    # FORCE numeric (CRITICAL FIX)
+    for col in ["Gross (t)", "Tare (t)", "Net (t)"]:
+        clean[col] = pd.to_numeric(clean[col], errors="coerce")
+
     return clean.dropna(subset=["Date"])
 
 df = load_data()
@@ -150,14 +129,13 @@ with f1:
 with f2:
     torpedo_filter = st.multiselect(
         "Torpedo No.",
-        sorted(df["Torpedo No"].unique())
+        sorted(df["Torpedo No"].dropna().unique())
     )
 
 with f3:
     cast_search = st.text_input("Cast ID")
 
 filtered = df.copy()
-
 filtered = filtered[
     (filtered["Date"] >= pd.to_datetime(date_range[0])) &
     (filtered["Date"] <= pd.to_datetime(date_range[1]))
@@ -222,15 +200,26 @@ c1.plotly_chart(
 )
 
 c2.plotly_chart(
-    px.bar(filtered, x="Torpedo No", y="Net (t)", title="Torpedo Number vs Net Metal (t)",
+    px.bar(filtered, x="Torpedo No", y="Net (t)",
+           title="Torpedo Number vs Net Metal (t)",
            color_discrete_sequence=["#F57C00"]),
     use_container_width=True
 )
 
+# STACKED BAR (FIXED)
+stack_df = filtered.groupby("Torpedo No", as_index=False)[
+    ["Gross (t)", "Tare (t)", "Net (t)"]
+].sum()
+
 c3.plotly_chart(
-    px.bar(filtered, x="Torpedo No", y=["Gross (t)", "Tare (t)", "Net (t)"],
-           title="Gross, Tare & Net Weight (t)", barmode="stack",
-           color_discrete_sequence=["#F57C00", "#2E3440", "#D32F2F"]),
+    px.bar(
+        stack_df,
+        x="Torpedo No",
+        y=["Gross (t)", "Tare (t)", "Net (t)"],
+        title="Gross, Tare & Net Weight (t)",
+        barmode="stack",
+        color_discrete_sequence=["#F57C00", "#2E3440", "#D32F2F"]
+    ),
     use_container_width=True
 )
 
