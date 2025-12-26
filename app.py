@@ -1,15 +1,14 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
 
-# -------------------- PAGE CONFIG --------------------
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Blast Furnace-2 Dashboard",
+    page_title="Blast Furnace–2 Dashboard",
     layout="wide"
 )
 
-# -------------------- CUSTOM CSS --------------------
+# ---------------- CUSTOM CSS ----------------
 st.markdown("""
 <style>
     .main {
@@ -18,9 +17,13 @@ st.markdown("""
     h1, h2, h3 {
         color: #0D1B2A;
     }
+    .subtitle {
+        color: #F57C00;
+        margin-top: -10px;
+    }
     .kpi-card {
         background-color: #0D1B2A;
-        padding: 20px;
+        padding: 18px;
         border-radius: 10px;
         color: white;
         text-align: center;
@@ -36,7 +39,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------- HEADER --------------------
+# ---------------- HEADER ----------------
 col1, col2 = st.columns([1, 6])
 
 with col1:
@@ -45,50 +48,68 @@ with col1:
 with col2:
     st.markdown(
         "<h1>Blast Furnace–2 | Torpedo Dispatch Dashboard</h1>"
-        "<h4 style='color:#F57C00;'>Hot Metal Production Monitoring</h4>",
+        "<div class='subtitle'>Hot Metal Production Monitoring</div>",
         unsafe_allow_html=True
     )
 
 st.markdown("---")
 
-# -------------------- LOAD DATA --------------------
+# ---------------- LOAD DATA (ROBUST) ----------------
 @st.cache_data
 def load_data():
     df = pd.read_excel("data/ladle_weight_bf2.xlsx")
-    df = df.rename(columns={
+
+    # Clean column names
+    df.columns = df.columns.str.strip().str.upper()
+
+    # Flexible renaming (handles messy plant data)
+    rename_map = {
         "DATE": "Date",
         "CAST ID": "Cast ID",
-        "TORPEDO No": "Torpedo No",
-        "GROSS (tonnes)": "Gross (t)",
-        "TARE (tonnes)": "Tare (t)",
-        "NET (tonnes)": "Net (t)"
-    })
-    df["Date"] = pd.to_datetime(df["Date"])
-    return df[["Date", "Cast ID", "Torpedo No", "Gross (t)", "Tare (t)", "Net (t)"]]
+        "CASTID": "Cast ID",
+        "TORPEDO NO": "Torpedo No",
+        "TORPEDO NO.": "Torpedo No",
+        "GROSS (TONNES)": "Gross (t)",
+        "GROSS(TONNES)": "Gross (t)",
+        "TARE (TONNES)": "Tare (t)",
+        "TARE(TONNES)": "Tare (t)",
+        "NET (TONNES)": "Net (t)",
+        "NET(TONNES)": "Net (t)"
+    }
+
+    df = df.rename(columns=rename_map)
+
+    # Convert Date safely
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+
+    # Keep only required columns
+    required_cols = ["Date", "Cast ID", "Torpedo No", "Gross (t)", "Tare (t)", "Net (t)"]
+    df = df[required_cols]
+
+    return df.dropna(subset=["Date"])
 
 df = load_data()
 
-# -------------------- FILTERS --------------------
+# ---------------- FILTERS ----------------
 st.subheader("Filters")
 
 f1, f2, f3 = st.columns(3)
 
 with f1:
     date_range = st.date_input(
-        "Select Date Range",
+        "Date range",
         [df["Date"].min(), df["Date"].max()]
     )
 
 with f2:
     torpedo_filter = st.multiselect(
-        "Select Torpedo No",
-        options=sorted(df["Torpedo No"].dropna().unique())
+        "Torpedo No",
+        sorted(df["Torpedo No"].dropna().unique())
     )
 
 with f3:
-    cast_search = st.text_input("Search Cast ID")
+    cast_search = st.text_input("Cast ID")
 
-# Apply filters
 filtered_df = df.copy()
 
 if date_range:
@@ -105,28 +126,28 @@ if cast_search:
         filtered_df["Cast ID"].astype(str).str.contains(cast_search, case=False)
     ]
 
-# -------------------- KPI CARDS --------------------
+# ---------------- KPI CARDS ----------------
 st.markdown("### Key Metrics")
 
 k1, k2, k3, k4 = st.columns(4)
 
 with k1:
     st.markdown(
-        f"<div class='kpi-card'><div>Total Casts</div>"
+        f"<div class='kpi-card'>Total Casts"
         f"<div class='kpi-value'>{filtered_df['Cast ID'].nunique()}</div></div>",
         unsafe_allow_html=True
     )
 
 with k2:
     st.markdown(
-        f"<div class='kpi-card'><div>Torpedos Used</div>"
+        f"<div class='kpi-card'>Torpedos Used"
         f"<div class='kpi-value'>{filtered_df['Torpedo No'].nunique()}</div></div>",
         unsafe_allow_html=True
     )
 
 with k3:
     st.markdown(
-        f"<div class='kpi-card'><div>Total Net Metal (t)</div>"
+        f"<div class='kpi-card'>Total Net Metal (t)"
         f"<div class='kpi-value net-red'>{filtered_df['Net (t)'].sum():.2f}</div></div>",
         unsafe_allow_html=True
     )
@@ -134,26 +155,30 @@ with k3:
 with k4:
     avg_net = filtered_df["Net (t)"].mean()
     st.markdown(
-        f"<div class='kpi-card'><div>Avg Net / Cast (t)</div>"
+        f"<div class='kpi-card'>Avg Net / Cast (t)"
         f"<div class='kpi-value'>{avg_net:.2f}</div></div>",
         unsafe_allow_html=True
     )
 
-# -------------------- DATA TABLE --------------------
+# ---------------- TABLE ----------------
 st.markdown("### Torpedo Dispatch Details")
 
-styled_df = filtered_df.sort_values("Date").style.format({
-    "Gross (t)": "{:.2f}",
-    "Tare (t)": "{:.2f}",
-    "Net (t)": "{:.2f}"
-}).applymap(
-    lambda x: "color:#D32F2F; font-weight:bold;",
-    subset=["Net (t)"]
+styled_df = (
+    filtered_df.sort_values("Date")
+    .style.format({
+        "Gross (t)": "{:.2f}",
+        "Tare (t)": "{:.2f}",
+        "Net (t)": "{:.2f}"
+    })
+    .applymap(
+        lambda x: "color:#D32F2F; font-weight:bold;",
+        subset=["Net (t)"]
+    )
 )
 
 st.dataframe(styled_df, use_container_width=True)
 
-# -------------------- CHARTS --------------------
+# ---------------- CHARTS ----------------
 st.markdown("### Production Analysis")
 
 c1, c2 = st.columns(2)
@@ -178,6 +203,7 @@ with c2:
     )
     st.plotly_chart(fig2, use_container_width=True)
 
+# ---------------- FOOTER ----------------
 st.markdown("---")
 st.markdown(
     "<center>© Blast Furnace–2 | Jindal Steel</center>",
