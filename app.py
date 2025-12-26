@@ -8,24 +8,17 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- CUSTOM CSS ----------------
+# ---------------- CSS ----------------
 st.markdown("""
 <style>
-    .main {
-        background-color: white;
-    }
-    h1, h2, h3 {
-        color: #0D1B2A;
-    }
-    .subtitle {
-        color: #F57C00;
-        margin-top: -10px;
-    }
-    .kpi-card {
+    .main { background-color: white; }
+    h1 { color: #0D1B2A; }
+    .subtitle { color: #F57C00; }
+    .kpi {
         background-color: #0D1B2A;
+        color: white;
         padding: 18px;
         border-radius: 10px;
-        color: white;
         text-align: center;
     }
     .kpi-value {
@@ -40,53 +33,61 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------- HEADER ----------------
-col1, col2 = st.columns([1, 6])
+c1, c2 = st.columns([1, 6])
 
-with col1:
+with c1:
     st.image("assets/jindal_logo.png", width=120)
 
-with col2:
-    st.markdown(
-        "<h1>Blast Furnace–2 | Torpedo Dispatch Dashboard</h1>"
-        "<div class='subtitle'>Hot Metal Production Monitoring</div>",
-        unsafe_allow_html=True
-    )
+with c2:
+    st.markdown("""
+    <h1>Blast Furnace–2 | Torpedo Dispatch Dashboard</h1>
+    <div class="subtitle">Hot Metal Production Monitoring</div>
+    """, unsafe_allow_html=True)
 
 st.markdown("---")
 
-# ---------------- LOAD DATA (ROBUST) ----------------
+# ---------------- DATA LOADER (BULLETPROOF) ----------------
 @st.cache_data
 def load_data():
     df = pd.read_excel("data/ladle_weight_bf2.xlsx")
 
-    # Clean column names
+    # Normalize column names
     df.columns = df.columns.str.strip().str.upper()
 
-    # Flexible renaming (handles messy plant data)
-    rename_map = {
-        "DATE": "Date",
-        "CAST ID": "Cast ID",
-        "CASTID": "Cast ID",
-        "TORPEDO NO": "Torpedo No",
-        "TORPEDO NO.": "Torpedo No",
-        "GROSS (TONNES)": "Gross (t)",
-        "GROSS(TONNES)": "Gross (t)",
-        "TARE (TONNES)": "Tare (t)",
-        "TARE(TONNES)": "Tare (t)",
-        "NET (TONNES)": "Net (t)",
-        "NET(TONNES)": "Net (t)"
+    def find_col(keyword):
+        for col in df.columns:
+            if keyword in col:
+                return col
+        return None
+
+    date_col = find_col("DATE")
+    cast_col = find_col("CAST")
+    torpedo_col = find_col("TORPEDO")
+    gross_col = find_col("GROSS")
+    tare_col = find_col("TARE")
+    net_col = find_col("NET")
+
+    required = {
+        "Date": date_col,
+        "Cast ID": cast_col,
+        "Torpedo No": torpedo_col,
+        "Gross (t)": gross_col,
+        "Tare (t)": tare_col,
+        "Net (t)": net_col
     }
 
-    df = df.rename(columns=rename_map)
+    missing = [k for k, v in required.items() if v is None]
+    if missing:
+        st.error(f"Missing columns in Excel: {missing}")
+        st.stop()
 
-    # Convert Date safely
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    clean_df = pd.DataFrame()
+    for new, old in required.items():
+        clean_df[new] = df[old]
 
-    # Keep only required columns
-    required_cols = ["Date", "Cast ID", "Torpedo No", "Gross (t)", "Tare (t)", "Net (t)"]
-    df = df[required_cols]
+    clean_df["Date"] = pd.to_datetime(clean_df["Date"], errors="coerce")
 
-    return df.dropna(subset=["Date"])
+    return clean_df.dropna(subset=["Date"])
 
 df = load_data()
 
@@ -110,102 +111,57 @@ with f2:
 with f3:
     cast_search = st.text_input("Cast ID")
 
-filtered_df = df.copy()
+filtered = df.copy()
 
-if date_range:
-    filtered_df = filtered_df[
-        (filtered_df["Date"] >= pd.to_datetime(date_range[0])) &
-        (filtered_df["Date"] <= pd.to_datetime(date_range[1]))
-    ]
+filtered = filtered[
+    (filtered["Date"] >= pd.to_datetime(date_range[0])) &
+    (filtered["Date"] <= pd.to_datetime(date_range[1]))
+]
 
 if torpedo_filter:
-    filtered_df = filtered_df[filtered_df["Torpedo No"].isin(torpedo_filter)]
+    filtered = filtered[filtered["Torpedo No"].isin(torpedo_filter)]
 
 if cast_search:
-    filtered_df = filtered_df[
-        filtered_df["Cast ID"].astype(str).str.contains(cast_search, case=False)
+    filtered = filtered[
+        filtered["Cast ID"].astype(str).str.contains(cast_search, case=False)
     ]
 
-# ---------------- KPI CARDS ----------------
+# ---------------- KPIs ----------------
 st.markdown("### Key Metrics")
 
 k1, k2, k3, k4 = st.columns(4)
 
-with k1:
-    st.markdown(
-        f"<div class='kpi-card'>Total Casts"
-        f"<div class='kpi-value'>{filtered_df['Cast ID'].nunique()}</div></div>",
-        unsafe_allow_html=True
-    )
-
-with k2:
-    st.markdown(
-        f"<div class='kpi-card'>Torpedos Used"
-        f"<div class='kpi-value'>{filtered_df['Torpedo No'].nunique()}</div></div>",
-        unsafe_allow_html=True
-    )
-
-with k3:
-    st.markdown(
-        f"<div class='kpi-card'>Total Net Metal (t)"
-        f"<div class='kpi-value net-red'>{filtered_df['Net (t)'].sum():.2f}</div></div>",
-        unsafe_allow_html=True
-    )
-
-with k4:
-    avg_net = filtered_df["Net (t)"].mean()
-    st.markdown(
-        f"<div class='kpi-card'>Avg Net / Cast (t)"
-        f"<div class='kpi-value'>{avg_net:.2f}</div></div>",
-        unsafe_allow_html=True
-    )
+k1.markdown(f"<div class='kpi'>Total Casts<div class='kpi-value'>{filtered['Cast ID'].nunique()}</div></div>", unsafe_allow_html=True)
+k2.markdown(f"<div class='kpi'>Torpedos Used<div class='kpi-value'>{filtered['Torpedo No'].nunique()}</div></div>", unsafe_allow_html=True)
+k3.markdown(f"<div class='kpi'>Total Net Metal<div class='kpi-value net-red'>{filtered['Net (t)'].sum():.2f}</div></div>", unsafe_allow_html=True)
+k4.markdown(f"<div class='kpi'>Avg Net / Cast<div class='kpi-value'>{filtered['Net (t)'].mean():.2f}</div></div>", unsafe_allow_html=True)
 
 # ---------------- TABLE ----------------
 st.markdown("### Torpedo Dispatch Details")
 
-styled_df = (
-    filtered_df.sort_values("Date")
-    .style.format({
-        "Gross (t)": "{:.2f}",
-        "Tare (t)": "{:.2f}",
-        "Net (t)": "{:.2f}"
-    })
-    .applymap(
-        lambda x: "color:#D32F2F; font-weight:bold;",
-        subset=["Net (t)"]
-    )
+styled = filtered.sort_values("Date").style.applymap(
+    lambda x: "color:#D32F2F; font-weight:bold;",
+    subset=["Net (t)"]
 )
 
-st.dataframe(styled_df, use_container_width=True)
+st.dataframe(styled, use_container_width=True)
 
 # ---------------- CHARTS ----------------
 st.markdown("### Production Analysis")
 
 c1, c2 = st.columns(2)
 
-with c1:
-    fig1 = px.bar(
-        filtered_df,
-        x="Date",
-        y="Net (t)",
-        title="Net Hot Metal by Date",
-        color_discrete_sequence=["#D32F2F"]
-    )
-    st.plotly_chart(fig1, use_container_width=True)
-
-with c2:
-    fig2 = px.bar(
-        filtered_df,
-        x="Torpedo No",
-        y="Net (t)",
-        title="Net Hot Metal by Torpedo",
-        color_discrete_sequence=["#F57C00"]
-    )
-    st.plotly_chart(fig2, use_container_width=True)
-
-# ---------------- FOOTER ----------------
-st.markdown("---")
-st.markdown(
-    "<center>© Blast Furnace–2 | Jindal Steel</center>",
-    unsafe_allow_html=True
+c1.plotly_chart(
+    px.bar(filtered, x="Date", y="Net (t)", title="Net Hot Metal by Date",
+           color_discrete_sequence=["#D32F2F"]),
+    use_container_width=True
 )
+
+c2.plotly_chart(
+    px.bar(filtered, x="Torpedo No", y="Net (t)", title="Net Hot Metal by Torpedo",
+           color_discrete_sequence=["#F57C00"]),
+    use_container_width=True
+)
+
+st.markdown("---")
+st.markdown("<center>© Blast Furnace–2 | Jindal Steel</center>", unsafe_allow_html=True)
